@@ -6,62 +6,46 @@
     environment:
       - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
       - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
-    image: rinhabackend
+      - DB_CONNECTION_STRING=Server=postgres;Port=5432;Database=payment;User Id=postgres;Password=Postgres2022!;
+    image: lbattochio/rinhabackend
     hostname: rinhabackend
-    ports:
-      - "3001:8080"
-    build:
-      context: .
-      dockerfile: RinhaBackend/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
     deploy:
       resources:
         limits:
-          cpus: "0.55"
-          memory: "140MB"
+          cpus: "0.4"
+          memory: "120MB"
   
   rinhabackend-2:
     <<: *rinhabackend
-    environment:
-      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
-      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
-    container_name: rinhabackend-2
-    ports:
-      - "3002:8080"
     hostname: rinhabackend-2
-    deploy:
-      resources:
-        limits:
-          cpus: "0.55"
-          memory: "140MB"
 
   postgres:
     image: postgres:16-alpine
     networks:
       - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d Postgres2022!"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
       POSTGRES_USER: postgres
       POSTGRES_DB: payment
       POSTGRES_PASSWORD: "Postgres2022!"
-    command: >-
-      postgres -c max_connections=400
-               -c shared_buffers=512MB
-               -c synchronous_commit=off
-               -c fsync=off
-               -c full_page_writes=off
-               -c wal_level=minimal
-               -c max_wal_senders=0
-               -c max_wal_size=4GB
-               -c checkpoint_timeout=30min
-               -c log_min_duration_statement=-1
+    command: postgres -c max_connections=450 -c shared_buffers=32MB -c effective_cache_size=96MB -c work_mem=3MB -c maintenance_work_mem=12MB -c synchronous_commit=off -c fsync=off
     ports:
       - "5432:5432"
     deploy:
       resources:
         limits:
-          cpus: "0.2"
-          memory: "40MB"
+          cpus: "0.4"
+          memory: "70MB"
 
   load-balancer:
     container_name: load-balancer
@@ -78,8 +62,8 @@
     deploy:
       resources:
         limits:
-          cpus: "0.2"
-          memory: "30MB"
+          cpus: "0.3"
+          memory: "40MB"
 
 
 

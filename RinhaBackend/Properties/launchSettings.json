@@ -10,8 +10,7 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "PAYMENT_PROCESSOR_URL_DEFAULT": "http://192.168.15.30:8001",
         "PAYMENT_PROCESSOR_URL_FALLBACK": "http://192.168.15.30:8002",
-        "RABBITMQ__HOST": "http://192.168.15.30",
-        "RABBITMQ__QUEUE": "payments"
+        "DB_CONNECTION_STRING": "Server=localhost;Port=5432;Database=payment;User Id=postgres;Password=Postgres2022!;"
       }
     },
     "tres": {
@@ -23,7 +22,7 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "PAYMENT_PROCESSOR_URL_DEFAULT": "http://192.168.15.30:8001",
         "PAYMENT_PROCESSOR_URL_FALLBACK": "http://192.168.15.30:8002",
-        "RABBITMQ__QUEUE": "payments"
+        "DB_CONNECTION_STRING": "Server=localhost;Port=5432;Database=payment;User Id=postgres;Password=Postgres2022!;"
       }
     }
   }

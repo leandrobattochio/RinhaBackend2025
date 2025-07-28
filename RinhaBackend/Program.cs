@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
 using Refit;
-using RinhaBackend;
 using RinhaBackend.Api;
 using RinhaBackend.Database;
 using Scalar.AspNetCore;
@@ -55,7 +54,7 @@ app.MapGet("/payments-summary",
             {
                 return TypedResults.Ok(new PaymentsSummary(new R(0, 0), new R(0, 0)));
             }
-            
+
             var grouped = logs
                 .GroupBy(e => e.Source)
                 .ToDictionary(
@@ -124,6 +123,6 @@ void AddEntityFrameworkCore(WebApplicationBuilder webApplicationBuilder)
 {
     webApplicationBuilder.Services.AddDbContext<PaymentProcessorDbContext>(opt =>
     {
-        opt.UseNpgsql("Server=postgres;Port=5432;Database=payment;User Id=postgres;Password=Postgres2022!;");
+        opt.UseNpgsql(webApplicationBuilder.Configuration.GetValue<string>("DB_CONNECTION_STRING"));
     });
 }

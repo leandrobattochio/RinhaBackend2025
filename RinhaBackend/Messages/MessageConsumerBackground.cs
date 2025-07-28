@@ -12,6 +12,7 @@ public class MessageConsumerBackground(
     IPaymentProcessorFallbackApi fallbackProcessor) : BackgroundService
 {
     private readonly int _workerCount = 4;
+    private readonly HashSet<Guid> _processedMessages = [];
 
     private async Task Consume(int workerId, CancellationToken stoppingToken)
     {
@@ -30,7 +31,7 @@ public class MessageConsumerBackground(
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var tasks = Enumerable.Range(0, _workerCount)
-            .Select(workerId => Task.Run(() => Consume(workerId, stoppingToken)));
+            .Select(workerId => Task.Run(() => Consume(workerId, stoppingToken), stoppingToken));
 
         return Task.WhenAll(tasks);
     }
@@ -39,6 +40,8 @@ public class MessageConsumerBackground(
     {
         try
         {
+            if (_processedMessages.Contains(message.CorrelationId)) return;
+
             var requestedAt = DateTime.UtcNow;
             var processorRequest =
                 new PaymentProcessorRequest(message.CorrelationId, message.Amount, requestedAt.ToString("O"));
@@ -54,7 +57,7 @@ public class MessageConsumerBackground(
             if (fallbackResponse.IsSuccessStatusCode)
                 await SavePaymentToDatabase("fallback", message, requestedAt);
         }
-        catch
+        catch (Exception ex)
         {
         }
     }
@@ -75,5 +78,7 @@ public class MessageConsumerBackground(
 
         await context.PaymentRequests.AddAsync(entity);
         await context.SaveChangesAsync();
+
+        _processedMessages.Add(requestDto.CorrelationId);
     }
 }
