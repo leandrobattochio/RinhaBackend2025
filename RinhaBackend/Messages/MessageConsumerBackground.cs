@@ -1,4 +1,5 @@
-﻿using RinhaBackend.Api;
+﻿using Microsoft.EntityFrameworkCore;
+using RinhaBackend.Api;
 using RinhaBackend.Database;
 using RinhaBackend.Database.Models;
 using RinhaBackend.Dto;
@@ -13,7 +14,6 @@ public class MessageConsumerBackground(
     IPaymentProcessorFallbackApi fallbackProcessor) : BackgroundService
 {
     private readonly int _workerCount = 4;
-    private readonly HashSet<Guid> _processedMessages = [];
 
     private async Task Consume(int workerId, CancellationToken stoppingToken)
     {
@@ -41,7 +41,12 @@ public class MessageConsumerBackground(
     {
         try
         {
-            if (_processedMessages.Contains(message.CorrelationId)) return;
+            using (var scope = serviceProvider.CreateScope())
+            {
+                var context = scope.ServiceProvider.GetRequiredService<PaymentProcessorDbContext>();
+                var exists = await context.PaymentRequests.AnyAsync(c => c.CorrelationId == message.CorrelationId);
+                if (exists) return;
+            }
 
             var requestedAt = DateTime.UtcNow;
             var processorRequest =
@@ -85,7 +90,5 @@ public class MessageConsumerBackground(
 
         await context.PaymentRequests.AddAsync(entity);
         await context.SaveChangesAsync();
-
-        _processedMessages.Add(requestDto.CorrelationId);
     }
 }
