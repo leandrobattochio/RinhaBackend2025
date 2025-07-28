@@ -1,0 +1,30 @@
+﻿{
+  "$schema": "https://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "http": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5154",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "PAYMENT_PROCESSOR_URL_DEFAULT": "http://192.168.15.30:8001",
+        "PAYMENT_PROCESSOR_URL_FALLBACK": "http://192.168.15.30:8002",
+        "RABBITMQ__HOST": "http://192.168.15.30",
+        "RABBITMQ__QUEUE": "payments"
+      }
+    },
+    "tres": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5155",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "PAYMENT_PROCESSOR_URL_DEFAULT": "http://192.168.15.30:8001",
+        "PAYMENT_PROCESSOR_URL_FALLBACK": "http://192.168.15.30:8002",
+        "RABBITMQ__QUEUE": "payments"
+      }
+    }
+  }
+}
