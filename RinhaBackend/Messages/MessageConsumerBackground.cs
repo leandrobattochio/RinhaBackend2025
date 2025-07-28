@@ -9,6 +9,7 @@ public class MessageConsumerBackground(
     IMemoryPublisher memoryPublisher,
     IServiceProvider serviceProvider,
     IPaymentProcessorApi defaultProcessor,
+    ILogger<MessageConsumerBackground> logger,
     IPaymentProcessorFallbackApi fallbackProcessor) : BackgroundService
 {
     private readonly int _workerCount = 4;
@@ -55,10 +56,16 @@ public class MessageConsumerBackground(
 
             var fallbackResponse = await fallbackProcessor.ProcessPaymentRequestAsync(processorRequest);
             if (fallbackResponse.IsSuccessStatusCode)
+            {
                 await SavePaymentToDatabase("fallback", message, requestedAt);
+                return;
+            }
+
+            await memoryPublisher.PublishAsync(message);
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "Error processing payment request");
         }
     }
 
