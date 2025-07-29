@@ -72,7 +72,8 @@ public class MessageConsumerBackground(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error processing payment request");
+            logger.LogError(ex, "Error processing payment request - resent to queue");
+            await memoryPublisher.PublishAsync(message);
         }
     }
 
