@@ -11,9 +11,11 @@ public class MessageConsumerBackground(
     IServiceProvider serviceProvider,
     IPaymentProcessorApi defaultProcessor,
     ILogger<MessageConsumerBackground> logger,
+    
     IPaymentProcessorFallbackApi fallbackProcessor) : BackgroundService
 {
     private readonly int _workerCount = 4;
+    private readonly TimeProvider _timeProvider = TimeProvider.System;
 
     private async Task Consume(int workerId, CancellationToken stoppingToken)
     {
@@ -48,7 +50,7 @@ public class MessageConsumerBackground(
             //     if (exists) return;
             // }
 
-            var requestedAt = DateTime.UtcNow;
+            var requestedAt = _timeProvider.GetUtcNow().UtcDateTime;
             var processorRequest =
                 new PaymentProcessorRequest(message.CorrelationId, message.Amount, requestedAt.ToString("O"));
 
