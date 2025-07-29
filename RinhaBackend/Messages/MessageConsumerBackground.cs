@@ -41,12 +41,12 @@ public class MessageConsumerBackground(
     {
         try
         {
-            using (var scope = serviceProvider.CreateScope())
-            {
-                var context = scope.ServiceProvider.GetRequiredService<PaymentProcessorDbContext>();
-                var exists = await context.PaymentRequests.AnyAsync(c => c.CorrelationId == message.CorrelationId);
-                if (exists) return;
-            }
+            // using (var scope = serviceProvider.CreateScope())
+            // {
+            //     var context = scope.ServiceProvider.GetRequiredService<PaymentProcessorDbContext>();
+            //     var exists = await context.PaymentRequests.AnyAsync(c => c.CorrelationId == message.CorrelationId);
+            //     if (exists) return;
+            // }
 
             var requestedAt = DateTime.UtcNow;
             var processorRequest =
