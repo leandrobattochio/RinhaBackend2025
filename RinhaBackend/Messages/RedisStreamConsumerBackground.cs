@@ -55,7 +55,7 @@ public class RedisConsumerBackground(
                 key: StreamName,
                 groupName: GroupName,
                 consumerName: "_consumerName",
-                position: position, 250);
+                position: position, 500);
 
             if (entries != null && entries.Length > 0)
                 return entries;
