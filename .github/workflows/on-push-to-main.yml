@@ -35,8 +35,10 @@ jobs:
 
       - name: Build da imagem Docker
         run: |
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/rinhabackend:latest .
+          COMMIT_HASH=${GITHUB_SHA::7}
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/rinhabackend:${COMMIT_HASH} .
 
       - name: Push da imagem para o Docker Hub
         run: |
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/rinhabackend:latest
+          COMMIT_HASH=${GITHUB_SHA::7}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/rinhabackend:${COMMIT_HASH}
