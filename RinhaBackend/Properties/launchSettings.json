@@ -8,9 +8,10 @@
       "applicationUrl": "http://localhost:5154",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "PAYMENT_PROCESSOR_URL_DEFAULT": "http://192.168.15.30:8001",
-        "PAYMENT_PROCESSOR_URL_FALLBACK": "http://192.168.15.30:8002",
-        "DB_CONNECTION_STRING": "Server=localhost;Port=5432;Database=payment;User Id=postgres;Password=Postgres2022!;"
+        "PAYMENT_PROCESSOR_URL_DEFAULT": "http://localhost:8001",
+        "PAYMENT_PROCESSOR_URL_FALLBACK": "http://localhost:8002",
+        "DB_CONNECTION_STRING": "Server=localhost;Port=5432;Database=payment;User Id=postgres;Password=Postgres2022!;",
+        "REDIS": "192.168.15.30:6379"
       }
     },
     "tres": {
@@ -20,9 +21,10 @@
       "applicationUrl": "http://localhost:5155",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "PAYMENT_PROCESSOR_URL_DEFAULT": "http://192.168.15.30:8001",
-        "PAYMENT_PROCESSOR_URL_FALLBACK": "http://192.168.15.30:8002",
-        "DB_CONNECTION_STRING": "Server=localhost;Port=5432;Database=payment;User Id=postgres;Password=Postgres2022!;"
+        "PAYMENT_PROCESSOR_URL_DEFAULT": "http://localhost:8001",
+        "PAYMENT_PROCESSOR_URL_FALLBACK": "http://localhost:8002",
+        "DB_CONNECTION_STRING": "Server=localhost;Port=5432;Database=payment;User Id=postgres;Password=Postgres2022!;",
+        "REDIS": "192.168.15.30:6379"
       }
     }
   }

@@ -1,4 +1,24 @@
 ﻿services:
+  
+  redis:
+    hostname: redis
+    networks:
+      - backend
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 1s
+      timeout: 3s
+      retries: 5
+      
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: "8MB"
+
   rinhabackend: &rinhabackend
     networks:
       - backend
@@ -7,22 +27,51 @@
       - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
       - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
       - DB_CONNECTION_STRING=Server=postgres;Port=5432;Database=payment;User Id=postgres;Password=Postgres2022!;
-    image: lbattochio/rinhabackend
-    hostname: rinhabackend
+      - REDIS=redis:6379
+    image: rinhabackend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: rinhabackend1a
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl --fail http://rinhabackend1a:8080/healthz || exit 1",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
     depends_on:
+      redis:
+        condition: service_healthy
       postgres:
         condition: service_healthy
     deploy:
       resources:
         limits:
-          cpus: "0.4"
-          memory: "120MB"
+          cpus: "0.5"
+          memory: "125MB"
   
   rinhabackend-2:
     <<: *rinhabackend
-    hostname: rinhabackend-2
+    hostname: rinhabackend1b
+    ports:
+      - "8686:8080"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl --fail http://rinhabackend1b:8080/healthz || exit 1",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
 
   postgres:
+    hostname: postgres
     image: postgres:16-alpine
     networks:
       - backend
@@ -44,15 +93,18 @@
     deploy:
       resources:
         limits:
-          cpus: "0.4"
-          memory: "70MB"
+          cpus: "0.3"
+          memory: "60MB"
 
   load-balancer:
+    hostname: loadbalancer
     container_name: load-balancer
     image: nginx:1.25-alpine
     depends_on:
-      - rinhabackend
-      - rinhabackend-2
+      rinhabackend:
+        condition: service_healthy
+      rinhabackend-2:
+        condition: service_healthy
     ports:
       - "9999:9999"
     volumes:
@@ -62,8 +114,8 @@
     deploy:
       resources:
         limits:
-          cpus: "0.3"
-          memory: "40MB"
+          cpus: "0.1"
+          memory: "32MB"
 
 
 

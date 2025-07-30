@@ -1,6 +1,9 @@
 @RinhaBackend_HostAddress = http://localhost:5154
 
-GET {{RinhaBackend_HostAddress}}/weatherforecast/
-Accept: application/json
+POST {{RinhaBackend_HostAddress}}/payments
+Content-Type: application/json
 
-###
+{
+    "correlationId": "457ac10b-58cc-4372-a567-0e02b2c3d479",
+    "amount": 19.90
+}

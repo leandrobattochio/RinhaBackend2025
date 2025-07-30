@@ -1,4 +1,5 @@
 ﻿FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine AS base
+RUN apk add --update curl
 USER $APP_UID
 WORKDIR /app
 EXPOSE 8080

@@ -1,3 +1,5 @@
+using Medallion.Threading;
+using Medallion.Threading.Redis;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Polly;
@@ -8,7 +10,9 @@ using RinhaBackend.Database;
 using Scalar.AspNetCore;
 using Polly.Extensions.Http;
 using RinhaBackend.Dto;
+using RinhaBackend.Factory;
 using RinhaBackend.Messages;
+using StackExchange.Redis;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,13 +34,41 @@ builder.Configuration
 
 builder.Services.AddOpenApi();
 
+// Redis config
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+    ConnectionMultiplexer.Connect(builder.Configuration.GetValue<string>("REDIS") ??
+                                  throw new NullReferenceException("REDIS")));
+
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration =
+        builder.Configuration.GetValue<string>("REDIS") ?? throw new NullReferenceException("REDIS");
+});
+builder.Services.AddSingleton<IDistributedLockProvider>(sp =>
+{
+    var redis = sp.GetRequiredService<IConnectionMultiplexer>();
+    return new RedisDistributedSynchronizationProvider(redis.GetDatabase());
+});
+
+// Queue stuff
 builder.Services.AddSingleton<IMemoryPublisher, MemoryPublisher>();
+builder.Services.AddSingleton<IRedisPublisher, RedisPublisher>();
+
+builder.Services.AddTransient<IPaymentProcessorFactory, PaymentProcessorFactory>();
+
 AddEntityFrameworkCore(builder);
 AddRefit(builder);
 
-builder.Services.AddHostedService<MessageConsumerBackground>();
+// builder.Services.AddHostedService<MessageConsumerBackground>();
+builder.Services.AddHostedService<RedisConsumerBackground>();
+
+// builder.Services.AddHostedService<PaymentProcessorHealthCheck>();
+
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
+
+app.MapHealthChecks("/healthz");
 
 // Configure the HTTP request pipeline.
 app.MapOpenApi();
@@ -82,7 +114,7 @@ app.MapGet("/payments-summary",
         })
     .WithName("payments-summary");
 
-app.MapPost("/payments", async (PaymentsRequestDto requestDto, [FromServices] IMemoryPublisher publisher) =>
+app.MapPost("/payments", async (PaymentsRequestDto requestDto, [FromServices] IRedisPublisher publisher) =>
     {
         await publisher.PublishAsync(requestDto);
         return TypedResults.Ok();
@@ -107,16 +139,21 @@ void AddRefit(WebApplicationBuilder webApplicationBuilder)
         medianFirstRetryDelay: TimeSpan.FromSeconds(1.5),
         retryCount: 3);
 
+    var fallbackBackoffDelay = Backoff.DecorrelatedJitterBackoffV2(
+        medianFirstRetryDelay: TimeSpan.FromSeconds(1.5),
+        retryCount: 1);
+
     var retryPolicy = HttpPolicyExtensions.HandleTransientHttpError().WaitAndRetryAsync(backoffDelay);
+    var fallBackRetryPolicy = HttpPolicyExtensions.HandleTransientHttpError().WaitAndRetryAsync(fallbackBackoffDelay);
 
     // Refit Payment Processor
-    webApplicationBuilder.Services.AddRefitClient<IPaymentProcessorApi>()
+    webApplicationBuilder.Services.AddRefitClient<IPaymentDefaultProcessorApi>()
         .ConfigureHttpClient(c => c.BaseAddress = new Uri(paymentProcessorUrlDefault))
         .AddPolicyHandler(retryPolicy);
 
-    webApplicationBuilder.Services.AddRefitClient<IPaymentProcessorFallbackApi>()
+    webApplicationBuilder.Services.AddRefitClient<IPaymentFallbackProcessorApi>()
         .ConfigureHttpClient(c => c.BaseAddress = new Uri(paymentProcessorUrlFallback))
-        .AddPolicyHandler(retryPolicy);
+        .AddPolicyHandler(fallBackRetryPolicy);
 }
 
 void AddEntityFrameworkCore(WebApplicationBuilder webApplicationBuilder)

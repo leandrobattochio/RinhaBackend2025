@@ -1,5 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
-using RinhaBackend.Api;
+﻿using RinhaBackend.Api;
 using RinhaBackend.Database;
 using RinhaBackend.Database.Models;
 using RinhaBackend.Dto;
@@ -11,8 +10,7 @@ public class MessageConsumerBackground(
     IServiceProvider serviceProvider,
     IPaymentProcessorApi defaultProcessor,
     ILogger<MessageConsumerBackground> logger,
-    
-    IPaymentProcessorFallbackApi fallbackProcessor) : BackgroundService
+    IPaymentFallbackProcessorApi fallbackProcessor) : BackgroundService
 {
     private readonly int _workerCount = 4;
     private readonly TimeProvider _timeProvider = TimeProvider.System;
