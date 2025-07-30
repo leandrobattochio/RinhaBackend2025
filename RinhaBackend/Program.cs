@@ -75,9 +75,14 @@ app.MapOpenApi();
 app.MapScalarApiReference();
 
 app.MapGet("/payments-summary",
-        async ([FromQuery(Name = "from")] DateTime from, [FromQuery(Name = "to")] DateTime to,
+        async ([FromQuery(Name = "from")] DateTime? from, [FromQuery(Name = "to")] DateTime? to,
             [FromServices] PaymentProcessorDbContext db) =>
         {
+            if (from == null && to == null)
+            {
+                return TypedResults.Ok(new PaymentsSummary(new R(0, 0), new R(0, 0)));
+            }
+            
             var logs = await db.PaymentRequests
                 .Where(p => p.RequestedAt >= from && p.RequestedAt <= to)
                 .ToListAsync();
