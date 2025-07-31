@@ -23,6 +23,13 @@ public class PaymentService(
     private readonly IReactiveLockTrackerState _reactiveLockTrackerState =
         lockFactory.GetTrackerState(LockName.SUMMARY_LOCK);
 
+    public async Task<IResult> PublishAsync(HttpContext context)
+    {
+        var requestDto = await context.Request.ReadFromJsonAsync<PaymentsRequestDto>();
+        await PublishAsync(requestDto!);
+        return Results.Ok();
+    }
+    
     public async Task<Ok> PublishAsync(PaymentsRequestDto requestDto)
     {
         try

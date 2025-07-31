@@ -13,6 +13,9 @@ public class PaymentSummaryService(
 {
     public async Task<Ok<PaymentsSummaryResponse>> GetPaymentSummary(DateTime? from, DateTime? to)
     {
+        from ??= DateTimeOffset.UtcNow.AddMinutes(-1).UtcDateTime;
+        to ??= DateTimeOffset.UtcNow.UtcDateTime;
+
         var paymentsLock = lockFactory.GetTrackerController(LockName.SUMMARY_LOCK);
         await paymentsLock.IncrementAsync().ConfigureAwait(false);
 
@@ -42,9 +45,9 @@ public class PaymentSummaryService(
             List<PaymentSummaryDbResult> result =
                 [.. await dbConnection.QueryAsync<PaymentSummaryDbResult>(sql, new { from, to })];
 
-            var defaultResult = result?.FirstOrDefault(r => r.Source == "default") ??
+            var defaultResult = result.FirstOrDefault(r => r.Source == "default") ??
                                 new PaymentSummaryDbResult("default", 0, 0);
-            var fallbackResult = result?.FirstOrDefault(r => r.Source == "fallback") ??
+            var fallbackResult = result.FirstOrDefault(r => r.Source == "fallback") ??
                                  new PaymentSummaryDbResult("fallback", 0, 0);
 
             var response = new PaymentsSummaryResponse(

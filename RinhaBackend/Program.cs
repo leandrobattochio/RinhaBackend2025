@@ -94,8 +94,8 @@ app.MapGet("/payments-summary",
         await paymentSummaryService.GetPaymentSummary(from, to));
 
 app.MapPost("/payments",
-    async (PaymentsRequestDto requestDto, [FromServices] PaymentService paymentService) =>
-    await paymentService.PublishAsync(requestDto));
+    (HttpContext context, [FromServices] PaymentService paymentService) =>
+    paymentService.PublishAsync(context));
 
 app.Run();
 return;
