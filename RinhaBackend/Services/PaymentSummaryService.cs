@@ -1,54 +1,94 @@
-﻿using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.EntityFrameworkCore;
-using RinhaBackend.Database;
+﻿using System.Data;
+using Dapper;
+using MichelOliveira.Com.ReactiveLock.DependencyInjection;
+using Microsoft.AspNetCore.Http.HttpResults;
 using RinhaBackend.Dto;
 
 namespace RinhaBackend.Services;
 
-public class PaymentSummaryService(IServiceProvider serviceProvider)
+public class PaymentSummaryService(
+    IReactiveLockTrackerFactory lockFactory,
+    PaymentBatchInserter batchInserter,
+    IDbConnection dbConnection)
 {
-    public async Task<Ok<PaymentsSummary>> GetPaymentSummary(DateTime? from, DateTime? to)
+    public async Task<Ok<PaymentsSummaryResponse>> GetPaymentSummary(DateTime? from, DateTime? to)
     {
-        if (from == null && to == null)
-        {
-            return TypedResults.Ok(new PaymentsSummary(new R(0, 0), new R(0, 0)));
-        }
-        
-        using var scope = serviceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<PaymentProcessorDbContext>();
-        
-        var logs = await db.PaymentRequests
-            .Where(p => p.RequestedAt >= from && p.RequestedAt <= to)
-            .ToListAsync();
+        var paymentsLock = lockFactory.GetTrackerController(LockName.SUMMARY_LOCK);
+        await paymentsLock.IncrementAsync().ConfigureAwait(false);
 
-        if (logs.Count == 0)
-        {
-            return TypedResults.Ok(new PaymentsSummary(new R(0, 0), new R(0, 0)));
-        }
+        var postgresChannelBlockingGate = lockFactory.GetTrackerState(LockName.POSTGRES_LOCK);
+        var channelBlockingGate = lockFactory.GetTrackerState(LockName.HTTP_LOCK);
 
-        var grouped = logs
-            .GroupBy(e => e.Source)
-            .ToDictionary(
-                g => g.Key,
-                g => new
+        try
+        {
+            await WaitWithTimeoutAsync(async () =>
+            {
+                await postgresChannelBlockingGate.WaitIfBlockedAsync().ConfigureAwait(false);
+                await channelBlockingGate.WaitIfBlockedAsync().ConfigureAwait(false);
+            }, timeout: TimeSpan.FromSeconds(1.3)).ConfigureAwait(false);
+
+
+            const string sql = """
+
+                               SELECT source,
+                               COUNT(*) AS TotalRequests,
+                               SUM(amount) AS TotalAmount
+                               FROM payment_request
+                               WHERE (@from IS NULL OR requestedat >= @from)
+                               AND (@to IS NULL OR requestedat <= @to)
+                               GROUP BY source;
+                                           
+                               """;
+            List<PaymentSummaryDbResult> result =
+                [.. await dbConnection.QueryAsync<PaymentSummaryDbResult>(sql, new { from, to })];
+
+            var defaultResult = result?.FirstOrDefault(r => r.Source == "default") ??
+                                new PaymentSummaryDbResult("default", 0, 0);
+            var fallbackResult = result?.FirstOrDefault(r => r.Source == "fallback") ??
+                                 new PaymentSummaryDbResult("fallback", 0, 0);
+
+            var response = new PaymentsSummaryResponse(
+                new ProcessorSummary(defaultResult.TotalRequests, defaultResult.TotalAmount),
+                new ProcessorSummary(fallbackResult.TotalRequests, fallbackResult.TotalAmount)
+            );
+
+            return TypedResults.Ok(response);
+        }
+        finally
+        {
+            await paymentsLock.DecrementAsync().ConfigureAwait(false);
+        }
+    }
+
+    public async Task FlushWhileGateBlockedAsync()
+    {
+        var state = lockFactory.GetTrackerState(LockName.SUMMARY_LOCK);
+
+        await state.WaitIfBlockedAsync(
+            whileBlockedLoopDelay: TimeSpan.FromMilliseconds(10),
+            whileBlockedAsync: async () =>
+            {
+                try
                 {
-                    totalRequests = g.Count(),
-                    totalAmount = g.Sum(x => x.Amount)
-                });
+                    await batchInserter.FlushQueueAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                }
+            }).ConfigureAwait(false);
+    }
 
-        if (grouped.Count == 0)
-        {
-            return TypedResults.Ok(new PaymentsSummary(new R(0, 0), new R(0, 0)));
-        }
+    private async Task<bool> WaitWithTimeoutAsync(Func<Task> taskFactory, TimeSpan timeout)
+    {
+        var task = taskFactory();
+        var timeoutTask = Task.Delay(timeout);
+        var completedTask = await Task.WhenAny(task, timeoutTask).ConfigureAwait(false);
 
-        var def = grouped.ContainsKey("default")
-            ? new R(grouped["default"].totalAmount, grouped["default"].totalRequests)
-            : new R(0, 0);
+        if (completedTask == timeoutTask)
+            return false;
 
-        var f = grouped.ContainsKey("fallback")
-            ? new R(grouped["fallback"].totalAmount, grouped["fallback"].totalRequests)
-            : new R(0, 0);
 
-        return TypedResults.Ok(new PaymentsSummary(def, f));
+        await task.ConfigureAwait(false);
+        return true;
     }
 }

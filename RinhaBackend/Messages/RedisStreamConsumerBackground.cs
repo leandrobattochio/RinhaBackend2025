@@ -1,9 +1,5 @@
 ﻿using System.Globalization;
-using RinhaBackend.Api;
-using RinhaBackend.Database;
-using RinhaBackend.Database.Models;
 using RinhaBackend.Dto;
-using RinhaBackend.Factory;
 using RinhaBackend.Services;
 using StackExchange.Redis;
 
@@ -12,7 +8,7 @@ namespace RinhaBackend.Messages;
 public class RedisConsumerBackground(
     IConnectionMultiplexer connectionMultiplexer,
     PaymentService paymentService,
-    ILogger<MessageConsumerBackground> logger) : BackgroundService
+    ILogger<RedisConsumerBackground> logger) : BackgroundService
 {
     private const string StreamName = "payments-stream";
     private const string GroupName = "payments-group";

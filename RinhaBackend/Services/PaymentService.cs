@@ -1,31 +1,38 @@
-﻿using System.Globalization;
+﻿using MichelOliveira.Com.ReactiveLock.Core;
+using MichelOliveira.Com.ReactiveLock.DependencyInjection;
 using Microsoft.AspNetCore.Http.HttpResults;
 using RinhaBackend.Api;
-using RinhaBackend.Database;
 using RinhaBackend.Database.Models;
 using RinhaBackend.Dto;
-using RinhaBackend.Factory;
+using RinhaBackend.Messages;
 using StackExchange.Redis;
 
 namespace RinhaBackend.Services;
 
 public class PaymentService(
-    IServiceProvider serviceProvider,
+    PaymentBatchInserter paymentBatchInserter,
+    IMemoryPublisher memoryPublisher,
+    IReactiveLockTrackerFactory lockFactory,
     IConnectionMultiplexer connectionMultiplexer,
-    IPaymentProcessorFactory paymentProcessorFactory,
+    IPaymentDefaultProcessorApi defaultProcessorApi,
     ILogger<PaymentService> logger)
 {
     private readonly IDatabase _database = connectionMultiplexer.GetDatabase();
     private readonly TimeProvider _timeProvider = TimeProvider.System;
 
+    private readonly IReactiveLockTrackerState _reactiveLockTrackerState =
+        lockFactory.GetTrackerState(LockName.SUMMARY_LOCK);
+
     public async Task<Ok> PublishAsync(PaymentsRequestDto requestDto)
     {
         try
         {
-            await _database.StreamAddAsync("payments-stream", [
-                new NameValueEntry("correlation-id", requestDto.CorrelationId.ToString()),
-                new NameValueEntry("amount", requestDto.Amount.ToString(CultureInfo.InvariantCulture))
-            ], flags: CommandFlags.FireAndForget);
+            await memoryPublisher.PublishAsync(requestDto);
+
+            // await _database.StreamAddAsync("payments-stream", [
+            //     new NameValueEntry("correlation-id", requestDto.CorrelationId.ToString()),
+            //     new NameValueEntry("amount", requestDto.Amount.ToString(CultureInfo.InvariantCulture))
+            // ], flags: CommandFlags.FireAndForget);
         }
         catch (Exception ex)
         {
@@ -43,19 +50,11 @@ public class PaymentService(
             var processorRequest =
                 new PaymentProcessorRequest(message.CorrelationId, message.Amount, requestedAt.ToString("O"));
 
-            var bestProcessor = await paymentProcessorFactory.GetProcessor();
-
-            // Os dois estão falhando
-            if (bestProcessor.Item1 == null)
-            {
-                await PublishAsync(message);
-                return false;
-            }
-
-            var response = await bestProcessor.Item1.ProcessPaymentRequestAsync(processorRequest);
+            await _reactiveLockTrackerState.WaitIfBlockedAsync().ConfigureAwait(false);
+            var response = await defaultProcessorApi.ProcessPaymentRequestAsync(processorRequest);
             if (response.IsSuccessStatusCode)
             {
-                await SavePaymentToDatabase(bestProcessor.Item2, message, requestedAt);
+                await SavePaymentToDatabase("default", message, requestedAt);
                 return true;
             }
 
@@ -73,9 +72,6 @@ public class PaymentService(
 
     private async Task SavePaymentToDatabase(string source, PaymentsRequestDto requestDto, DateTime requestedAt)
     {
-        using var scope = serviceProvider.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<PaymentProcessorDbContext>();
-
         var entity = new PaymentRequest()
         {
             Amount = requestDto.Amount,
@@ -84,7 +80,6 @@ public class PaymentService(
             Source = source
         };
 
-        await context.PaymentRequests.AddAsync(entity);
-        await context.SaveChangesAsync();
+        await paymentBatchInserter.Enqueue(entity);
     }
 }
