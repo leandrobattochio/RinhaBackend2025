@@ -1,5 +1,4 @@
 ﻿using Medallion.Threading;
-using Microsoft.Extensions.Caching.Distributed;
 using Newtonsoft.Json;
 using RinhaBackend.Api;
 using StackExchange.Redis;
@@ -7,7 +6,6 @@ using StackExchange.Redis;
 namespace RinhaBackend.Factory;
 
 public class PaymentProcessorFactory(
-    IDistributedCache distributedCache,
     ILogger<PaymentProcessorFactory> logger,
     IDistributedLockProvider distributedLockProvider,
     IPaymentDefaultProcessorApi defaultProcessor,

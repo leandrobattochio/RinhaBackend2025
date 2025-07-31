@@ -4,18 +4,16 @@ using RinhaBackend.Database;
 using RinhaBackend.Database.Models;
 using RinhaBackend.Dto;
 using RinhaBackend.Factory;
+using RinhaBackend.Services;
 using StackExchange.Redis;
 
 namespace RinhaBackend.Messages;
 
 public class RedisConsumerBackground(
-    IRedisPublisher memoryPublisher,
     IConnectionMultiplexer connectionMultiplexer,
-    IServiceProvider serviceProvider,
-    IPaymentProcessorFactory paymentProcessorFactory,
+    PaymentService paymentService,
     ILogger<MessageConsumerBackground> logger) : BackgroundService
 {
-    private readonly TimeProvider _timeProvider = TimeProvider.System;
     private const string StreamName = "payments-stream";
     private const string GroupName = "payments-group";
 
@@ -79,7 +77,7 @@ public class RedisConsumerBackground(
                     Amount: decimal.Parse(fields["amount"], CultureInfo.InvariantCulture)
                 );
 
-                await ProcessPayment(msg);
+                await paymentService.ProcessPayment(msg);
                 await db.StreamAcknowledgeAsync(StreamName, GroupName, entry.Id);
             }
             catch (Exception ex)
@@ -88,58 +86,5 @@ public class RedisConsumerBackground(
                 // NÃO dá ACK → permanece pendente
             }
         }
-    }
-
-    private async Task<bool> ProcessPayment(PaymentsRequestDto message)
-    {
-        try
-        {
-            var requestedAt = _timeProvider.GetUtcNow().UtcDateTime;
-            var processorRequest =
-                new PaymentProcessorRequest(message.CorrelationId, message.Amount, requestedAt.ToString("O"));
-
-            var bestProcessor = await paymentProcessorFactory.GetProcessor();
-
-            // Os dois estão falhando
-            if (bestProcessor.Item1 == null)
-            {
-                await memoryPublisher.PublishAsync(message);
-                return false;
-            }
-
-            var response = await bestProcessor.Item1.ProcessPaymentRequestAsync(processorRequest);
-            if (response.IsSuccessStatusCode)
-            {
-                await SavePaymentToDatabase(bestProcessor.Item2, message, requestedAt);
-                return true;
-            }
-
-            await memoryPublisher.PublishAsync(message);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error processing payment request - resent to queue");
-            await memoryPublisher.PublishAsync(message);
-            return false;
-        }
-    }
-
-
-    private async Task SavePaymentToDatabase(string source, PaymentsRequestDto requestDto, DateTime requestedAt)
-    {
-        using var scope = serviceProvider.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<PaymentProcessorDbContext>();
-
-        var entity = new PaymentRequest()
-        {
-            Amount = requestDto.Amount,
-            CorrelationId = requestDto.CorrelationId,
-            RequestedAt = requestedAt,
-            Source = source
-        };
-
-        await context.PaymentRequests.AddAsync(entity);
-        await context.SaveChangesAsync();
     }
 }

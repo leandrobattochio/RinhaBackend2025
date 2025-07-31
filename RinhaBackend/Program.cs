@@ -12,6 +12,7 @@ using Polly.Extensions.Http;
 using RinhaBackend.Dto;
 using RinhaBackend.Factory;
 using RinhaBackend.Messages;
+using RinhaBackend.Services;
 using StackExchange.Redis;
 
 
@@ -50,19 +51,16 @@ builder.Services.AddSingleton<IDistributedLockProvider>(sp =>
     return new RedisDistributedSynchronizationProvider(redis.GetDatabase());
 });
 
-// Queue stuff
 builder.Services.AddSingleton<IMemoryPublisher, MemoryPublisher>();
-builder.Services.AddSingleton<IRedisPublisher, RedisPublisher>();
-
 builder.Services.AddTransient<IPaymentProcessorFactory, PaymentProcessorFactory>();
+
+builder.Services.AddSingleton<PaymentSummaryService>();
+builder.Services.AddSingleton<PaymentService>();
 
 AddEntityFrameworkCore(builder);
 AddRefit(builder);
 
-// builder.Services.AddHostedService<MessageConsumerBackground>();
 builder.Services.AddHostedService<RedisConsumerBackground>();
-
-// builder.Services.AddHostedService<PaymentProcessorHealthCheck>();
 
 builder.Services.AddHealthChecks();
 
@@ -75,56 +73,13 @@ app.MapOpenApi();
 app.MapScalarApiReference();
 
 app.MapGet("/payments-summary",
-        async ([FromQuery(Name = "from")] DateTime? from, [FromQuery(Name = "to")] DateTime? to,
-            [FromServices] PaymentProcessorDbContext db) =>
-        {
-            if (from == null && to == null)
-            {
-                return TypedResults.Ok(new PaymentsSummary(new R(0, 0), new R(0, 0)));
-            }
-            
-            var logs = await db.PaymentRequests
-                .Where(p => p.RequestedAt >= from && p.RequestedAt <= to)
-                .ToListAsync();
+    async ([FromQuery(Name = "from")] DateTime? from, [FromQuery(Name = "to")] DateTime? to,
+            [FromServices] PaymentSummaryService paymentSummaryService) =>
+        await paymentSummaryService.GetPaymentSummary(from, to));
 
-            if (logs.Count == 0)
-            {
-                return TypedResults.Ok(new PaymentsSummary(new R(0, 0), new R(0, 0)));
-            }
-
-            var grouped = logs
-                .GroupBy(e => e.Source)
-                .ToDictionary(
-                    g => g.Key,
-                    g => new
-                    {
-                        totalRequests = g.Count(),
-                        totalAmount = g.Sum(x => x.Amount)
-                    });
-
-            if (grouped.Count == 0)
-            {
-                return TypedResults.Ok(new PaymentsSummary(new R(0, 0), new R(0, 0)));
-            }
-
-            var def = grouped.ContainsKey("default")
-                ? new R(grouped["default"].totalAmount, grouped["default"].totalRequests)
-                : new R(0, 0);
-
-            var f = grouped.ContainsKey("fallback")
-                ? new R(grouped["fallback"].totalAmount, grouped["fallback"].totalRequests)
-                : new R(0, 0);
-
-            return TypedResults.Ok(new PaymentsSummary(def, f));
-        })
-    .WithName("payments-summary");
-
-app.MapPost("/payments", async (PaymentsRequestDto requestDto, [FromServices] IRedisPublisher publisher) =>
-    {
-        await publisher.PublishAsync(requestDto);
-        return TypedResults.Ok();
-    })
-    .WithName("Payments");
+app.MapPost("/payments",
+    async (PaymentsRequestDto requestDto, [FromServices] PaymentService paymentService) =>
+    await paymentService.PublishAsync(requestDto));
 
 app.Run();
 return;
